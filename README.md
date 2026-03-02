@@ -26,10 +26,11 @@ Based on validation using real-time hotspot data from Sumatra (July–September 
 | `jumlah_hotspot` | Ground truth data (Target Variable) |
 
 ## 🗺️ Visualization Result
-![Sumatra Fire Risk Map](RISK_MAP_FLFRS_FINAL.png)
+![Sumatra Fire Risk Map](RISK_MAP_SUMATRA_Q32025)
 
 ## 🛠️ Installation
 ```bash
 pip install -r requirements.txt
 python main.py
+
 python visualization.py
