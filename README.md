@@ -34,7 +34,7 @@ The model demonstrates high effectiveness in identifying fire hotspots across di
 * `gabungan_10_wilayah_batas_provinsi.geojson`: Sumatra administrative boundaries for mapping.
 
 ## 🗺️ Visualization Result (Q3 2025)
-![Sumatra Forest and Land Fire Risk Status Map Quarter 3 2025](PETA_Q3_2025_FINAL.png)
+![Sumatra Forest and Land Fire Risk Status Map Quarter 3 2025](RISK_MAP_SUMATRA_Q3_2025.png)
 
 ## 📜 Methodology
 1.  **Data Preprocessing**: Loading dataset and filtering for 8 main provinces in Sumatra.
@@ -47,3 +47,4 @@ The model demonstrates high effectiveness in identifying fire hotspots across di
 pip install -r requirements.txt
 python main.py
 python visualization.py
+
