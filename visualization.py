@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Visualization Script: VLIF Model Sumatra - Ujicoba GitHub
+Visualization Script: VLIF Model Sumatra
 Periode: Triwulan 3 2025
 """
 
@@ -61,7 +61,8 @@ stats_pct = (stats.divide(stats.sum(axis=1), axis=0) * 100)
 total_hotspot = df['jumlah_hotspot'].sum()
 total_grid = len(df)
 
-def calculate_local_er(status):
+# FUNGSI DIUBAH NAMA MENJADI CALCULATE_ER
+def calculate_er(status):
     subset = df[df['klaster_risiko_fcm'] == status]
     if len(subset) == 0 or total_hotspot == 0: return 0
     hotspots_status = subset['jumlah_hotspot'].sum()
@@ -69,16 +70,17 @@ def calculate_local_er(status):
     er = (hotspots_status / total_hotspot) / (grids_status / total_grid)
     return er
 
-ER_AWAS_Q3 = calculate_local_er('Awas')
-ER_WASPADA_Q3 = calculate_local_er('Waspada')
-ER_AMAN_Q3 = calculate_local_er('Aman')
+# VARIABEL DIUBAH MENJADI FORMAL
+ER_AWAS = calculate_er('Awas')
+ER_WASPADA = calculate_er('Waspada')
+ER_AMAN = calculate_er('Aman')
 
 # Hitung Skor FLFRS
 stats_pct['FLFRS'] = (
-    (stats_pct.get('Awas', 0) * ER_AWAS_Q3) +
-    (stats_pct.get('Waspada', 0) * ER_WASPADA_Q3) +
-    (stats_pct.get('Aman', 0) * ER_AMAN_Q3)
-) / ER_AWAS_Q3
+    (stats_pct.get('Awas', 0) * ER_AWAS) +
+    (stats_pct.get('Waspada', 0) * ER_WASPADA) +
+    (stats_pct.get('Aman', 0) * ER_AMAN)
+) / ER_AWAS
 
 stats_pct = stats_pct.reset_index()
 
@@ -173,7 +175,7 @@ leg_patches = [
 # Legenda di luar area plot utama
 ax.legend(handles=leg_patches, loc='center left', bbox_to_anchor=(1.05, 0.5),
           fontsize=20, frameon=True, shadow=True, facecolor='white',
-          title=f"FLFRS THRESHOLD\n(LOCAL ER Q3)", title_fontsize=22)
+          title=f"FLFRS THRESHOLD\n(EFFICIENCY RATIO)", title_fontsize=22)
 
 # --- FINAL ADJUSTMENT FOR PADDING ---
 plt.subplots_adjust(right=0.75, top=0.90, bottom=0.05) # Mengatur ruang agar tidak dempet
