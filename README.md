@@ -40,44 +40,38 @@ This study utilizes an integrated dataset of 2,614,056 spatial observations. Key
 You can replicate the dataset construction from scratch using the provided pipeline.
 
 * **Pipeline Script**: `vlif_dataset_integration.py`
-* **Large File Download**: Due to GitHub size limits, the **Human_Activity_Index.zip** (containing OSM infrastructure data) must be downloaded from the following link:
-  > [🔗 Download Human_Activity_Index.zip https://bit.ly/HumanActivityZipFile
+* **Large File Download**: Due to GitHub size limits, the **Human_Activity_Index.zip** must be downloaded from:
+  > [🔗 Download Human_Activity_Index.zip](https://bit.ly/HumanActivityZipFile)
 
 > [!IMPORTANT]
 > **Technical Note on Dataset Population:**
 > The provided `VLIF_50000_SAMPLES.csv` is a statistically preserved sample derived from the original research population of **2,614,056 observations**. 
-> 
-> This full population represents a complete 2-year spatio-temporal grid (January 2023 – December 2024) covering the entire Sumatra region, with a spatial resolution of **0.1° (~11.1 km per grid)**. 
-> 
-> If you choose to re-run the `vlif_dataset_integration.py` script using only the provided 50k sample framework, the resulting normalization values (`vpd_norm`, `lvi_norm`) will differ slightly. This is because the global normalization in the official dataset was calculated based on the maximum and minimum values of the entire 2.6 million-row population to ensure regional consistency. However, the core research substance, model logic, and risk patterns remain identical.
+> This represents a complete 2-year spatio-temporal grid (2023–2024) covering Sumatra at **0.1° resolution**. Normalization in the official sample is based on this global population.
 
 ## 📁 Repository Structure
-* `vlif_dataset_integration.py`: Script to fuse multi-source raw data into the integrated VLIF format.
-* `main.py`: Core logic for Bivariate FCM clustering, automatic label sorting, and validation.
-* `visualization.py`: Script for spatial quarterly modal aggregation and risk map rendering.
+* `vlif_dataset_integration.py`: Script to fuse multi-source raw data.
+* `main.py`: Core logic for Bivariate FCM clustering and validation.
+* `visualization.py`: Script for spatial modal aggregation and risk map rendering.
 * `VLIF_50000_SAMPLES.csv`: Official representative dataset (Sampled from 2.6M records).
 * `provinsisumatera.geojson`: Sumatra provincial boundaries.
 
-## 🗺️ Visualization Result (Quarter 1-4)
-![Sumatra VLIF-Model Fire Risk Map](risk_map_vlif_model.png)
-*Figure: Spatio-temporal distribution of forest fire risk in Sumatra (Quarter 1-4) using the VLIF-Model.*
+## ⚙️ Execution Guide (Google Colab / Local)
 
-## 📜 Methodology
-1. **Data Integration**: Fusing atmospheric (VPD), edaphic (Peat & Land Cover), and anthropogenic (HAI) data.
-2. **Preprocessing**: Global normalization of bivariate inputs (`vpd_norm` and `lvi_norm`).
-3. **Clustering (Bivariate FCM)**: Dynamic classification into Low, Moderate, and High Risk zones.
-4. **Validation**: Evaluating model precision using ROC-AUC and energy-based (FRP) statistics.
-5. **Geospatial Mapping**: Aggregating risk classes into Quarterly Modals and spatial interpolation.
+### Option 1: Quick Start (Using Ready-to-Use Dataset)
+1. **Prepare Files:** Download all files from this repository.
+2. **Upload to Colab:** Upload `VLIF_50000_SAMPLES.csv` and `provinsisumatera.geojson` to your Colab session.
+3. **Run Clustering:** Execute `main.py` to generate risk clusters and statistical metrics.
+4. **Run Visualization:** Execute `visualization.py` to generate the 4-panel fire risk map.
 
-## ⚙️ Execution Guide
+### Option 2: Full Integration Pipeline (Build Dataset)
+1. **Prepare Files:** Download raw components (`ERA5-Land`, `HAI.zip`, `Peat_Lands.zip`, `MODIS.tif`).
+2. **Upload to Colab:** Upload all raw files + `provinsisumatera.geojson` to your Colab session.
+3. **Run Integration:** Execute `vlif_dataset_integration.py`.
+4. **Wait for Output:** A new `VLIF_50000_SAMPLES.csv` will be generated in your session.
+5. **Proceed to Model:** Run `main.py` followed by `visualization.py` for results.
 
-### Option 1: Quick Start (Ready-to-Use Dataset)
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Run clustering and validation
+# Example command sequence
+pip install pandas geopandas rasterio scikit-fuzzy scipy
 python main.py
-
-# 3. Render and display the map
 python visualization.py
