@@ -44,8 +44,12 @@ You can replicate the dataset construction from scratch using the provided pipel
   > [🔗 Download Human_Activity_Index.zip https://bit.ly/HumanActivityZipFile
 
 > [!IMPORTANT]
-> **Technical Note:** The provided `VLIF_50000_SAMPLES.csv` is a statistically preserved sample derived from the original population of **2.6 million rows**. 
-> If you choose to re-run the integration script on the provided sample framework, normalization values (`vpd_norm`, `lvi_norm`) may vary slightly due to scale calculation differences, but the research substance and model logic remain identical.
+> **Technical Note on Dataset Population:**
+> The provided `VLIF_50000_SAMPLES.csv` is a statistically preserved sample derived from the original research population of **2,614,056 observations**. 
+> 
+> This full population represents a complete 2-year spatio-temporal grid (January 2023 – December 2024) covering the entire Sumatra region, with a spatial resolution of **0.1° (~11.1 km per grid)**. 
+> 
+> If you choose to re-run the `vlif_dataset_integration.py` script using only the provided 50k sample framework, the resulting normalization values (`vpd_norm`, `lvi_norm`) will differ slightly. This is because the global normalization in the official dataset was calculated based on the maximum and minimum values of the entire 2.6 million-row population to ensure regional consistency. However, the core research substance, model logic, and risk patterns remain identical.
 
 ## 📁 Repository Structure
 * `vlif_dataset_integration.py`: Script to fuse multi-source raw data into the integrated VLIF format.
