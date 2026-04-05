@@ -39,14 +39,15 @@ This study utilizes an integrated dataset of 2,614,056 spatial observations. Key
 ## 🛠️ Data Pipeline & Integration (Optional)
 You can replicate the dataset construction from scratch using the provided pipeline.
 
-* **Pipeline Script**: `vlif_dataset_integration.py`
-* **Large File Download**: Due to GitHub size limits, the **Human_Activity_Index.zip** must be downloaded from:
-  > [🔗 Download Human_Activity_Index.zip](https://bit.ly/HumanActivityZipFile)
-
 > [!IMPORTANT]
-> **Technical Note on Dataset Population:**
+> **Technical Note on Normalization & Dataset Population:**
 > The provided `VLIF_50000_SAMPLES.csv` is a statistically preserved sample derived from the original research population of **2,614,056 observations**. 
-> This represents a complete 2-year spatio-temporal grid (2023–2024) covering Sumatra at **0.1° resolution**. Normalization in the official sample is based on this global population.
+> 
+> This represents a complete 2-year spatio-temporal grid (2023–2024) covering the entire Sumatra region at **0.1° resolution**. 
+>
+> **Please Note:** If you choose to re-run the `vlif_dataset_integration.py` script using the 50,000-row sample framework provided here, the resulting values for feature-engineered variables (**VPD**, **LVI**, and **HAI**) will differ slightly from the official pre-prepared sample. 
+> 
+> This is because the official sample uses **Global Normalization** based on the full 2.6 million-row population to ensure regional consistency. In contrast, running the script on a smaller subset will perform **Local Normalization** based only on the range of those 50k rows. However, while the decimal values may vary, the **data quality, research substance, and model logic remain identical.**
 
 ## 📁 Repository Structure
 * `vlif_dataset_integration.py`: Script to fuse multi-source raw data.
