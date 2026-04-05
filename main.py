@@ -1,127 +1,102 @@
-# -*- coding: utf-8 -*-
-"""
-Main Script: VLIF Model Sumatra - Ujicoba GitHub (Full Validation - In Memory)
-"""
+!pip install -U scikit-fuzzy  # Jalankan ini jika di Colab belum terinstall
 
-import os
-import sys
+import pandas as pd
+import numpy as np
+import skfuzzy as fuzz
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc, brier_score_loss
+import gc
 
-# --- AUTO-INSTALLER ---
-try:
-    import numpy as np
-    import pandas as pd
-    import skfuzzy as fuzz
-    from scipy.stats import pearsonr
-except ImportError:
-    print("Installing required libraries... please wait.")
-    os.system(f"{sys.executable} -m pip install numpy pandas scikit-fuzzy scipy")
-    import numpy as np
-    import pandas as pd
-    import skfuzzy as fuzz
-    from scipy.stats import pearsonr
+# ============================================================
+# 1. LOAD DATASET MINI
+# ============================================================
+path = '/content/VLIF_50000_SAMPLES.csv'
+df = pd.read_csv(path)
 
-# ==========================================
-# VLIF MODEL (INTEGRATION VPD + IBK/LVI)
-# ==========================================
-class VLIFModelSumatra:
-    def __init__(self, m=2.0, epsilon=1e-5, max_iter=1000):
-        self.m = m
-        self.epsilon = epsilon
-        self.max_iter = max_iter
-        self.centroids = None
-        self.fpc = None # Fuzzy Partition Coefficient
+# Persiapkan data untuk skfuzzy
+data_input = df[['vpd_norm', 'lvi_norm']].values.T
 
-    def run_ufcm(self, data):
-        X = data.reshape(1, -1)
-        cntr, u, u0, d, jm, p, fpc = fuzz.cluster.cmeans(
-            X, c=3, m=self.m, error=self.epsilon,
-            maxiter=self.max_iter, init=None
-        )
-        self.fpc = fpc # Spatial Separation Metric
-        
-        # Sorting Clusters: 0=Aman(Low), 1=Waspada(Mod), 2=Awas(High)
-        idx = np.argsort(cntr.flatten())
-        self.centroids = cntr[idx]
-        return np.argmax(u[idx], axis=0)
+# ============================================================
+# 2. RUN FUZZY C-MEANS (K=3)
+# ============================================================
+cntr, u, u0, d, jm, p, fpc = fuzz.cluster.cmeans(
+    data_input, c=3, m=2, error=0.005, maxiter=1000, init=None
+)
 
-    # 1. METRIC: EFFICIENCY RATIO (ER)
-    def validate_er(self, df, label_col, hotspot_col):
-        total_h = df[hotspot_col].sum()
-        total_n = len(df)
-        results = []
-        labels = {0: 'Low Risk', 1: 'Moderate Risk', 2: 'High Risk'}
+# ============================================================
+# 3. LABELING & SORTING
+# ============================================================
+cluster_priority = np.sum(cntr, axis=1).argsort()
+low_idx, mod_idx, high_idx = cluster_priority[0], cluster_priority[1], cluster_priority[2]
 
-        for i in range(3):
-            subset = df[df[label_col] == i]
-            n_i = len(subset)
-            h_i = subset[hotspot_col].sum()
-            er = (h_i / total_h) / (n_i / total_n) if total_h > 0 else 0
-            results.append({'Cluster': labels[i], 'Hotspots': h_i, 'Area_Size': n_i, 'ER': round(er, 4)})
-        return pd.DataFrame(results)
+df['prob_low'] = u[low_idx]
+df['prob_moderate'] = u[mod_idx]
+df['prob_high'] = u[high_idx]
 
-    # 2. METRIC: EFFECT SIZE (COHEN'S D)
-    def calculate_cohens_d(self, df, value_col, label_col):
-        high_risk = df[df[label_col] == 2][value_col]
-        low_risk = df[df[label_col] == 0][value_col]
-        
-        n1, n2 = len(high_risk), len(low_risk)
-        var1, var2 = high_risk.var(), low_risk.var()
-        
-        # Pooled standard deviation
-        pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
-        d = (high_risk.mean() - low_risk.mean()) / pooled_std
-        return d
+df['risk_cluster'] = np.argmax(u, axis=0)
+label_map = {low_idx: 0, mod_idx: 1, high_idx: 2}
+df['risk_cluster'] = df['risk_cluster'].map(label_map)
 
-    # 3. METRIC: MONTHLY R-SQUARED
-    def calculate_monthly_r2(self, df, value_col, hotspot_col, date_col):
-        df[date_col] = pd.to_datetime(df[date_col])
-        df['month'] = df[date_col].dt.to_period('M')
-        
-        monthly_data = df.groupby('month').agg({
-            value_col: 'mean',
-            hotspot_col: 'sum'
-        })
-        
-        r, _ = pearsonr(monthly_data[value_col], monthly_data[hotspot_col])
-        return r**2
+# ============================================================
+# 4. HITUNG METRIK VALIDASI & STATISTIK KLASTER
+# ============================================================
+y_true = (df['jumlah_hotspot'] > 0).astype(int)
+y_score = df['prob_high'] 
 
-if __name__ == "__main__":
-    file_path = '/content/DATASET_GITHUB_SUMATRA_Q3_2025.csv'
+# Metrik Validasi
+fpr, tpr, _ = roc_curve(y_true, y_score)
+roc_auc = auc(fpr, tpr)
+brier = brier_score_loss(y_true, y_score)
 
-    if os.path.exists(file_path):
-        df = pd.read_csv(file_path)
-        model = VLIFModelSumatra()
+# Statistik Distribusi & Efektivitas per Klaster
+total_samples = len(df)
+total_hotspots = df['jumlah_hotspot'].sum()
+total_frp = df['frp'].sum()
 
-        if 'FLFI' in df.columns:
-            print(f"Processing Dataset (In-Memory): {file_path}")
-            
-            # --- CLUSTERING IN MEMORY ONLY ---
-            # Original CSV data will NOT be modified
-            df_temp = df.copy()
-            df_temp['Risk_Status'] = model.run_ufcm(df_temp['FLFI'].values)
+stats = []
+for i, label in enumerate(['LOW', 'MODERATE', 'HIGH']):
+    mask = df['risk_cluster'] == i
+    area_pct = (mask.sum() / total_samples) * 100
+    h_count = df.loc[mask, 'jumlah_hotspot'].sum()
+    h_pct = (h_count / total_hotspots * 100) if total_hotspots > 0 else 0
+    f_sum = df.loc[mask, 'frp'].sum()
+    f_pct = (f_sum / total_frp * 100) if total_frp > 0 else 0
+    stats.append([label, area_pct, h_count, h_pct, f_sum, f_pct])
 
-            # --- FULL VALIDATION ---
-            print("\nVLIF-MODEL VALIDATION METRICS (Using Existed FLFI)")
-            print("="*65)
-            
-            # A. Efficiency Ratio
-            print("\n[1] Cluster Efficiency Ratio (ER):")
-            report = model.validate_er(df_temp, 'Risk_Status', 'jumlah_hotspot')
-            print(report.to_string(index=False))
-            
-            # B. Spatial Separation (FPC)
-            print(f"\n[2] Spatial Separation (Fuzzy Partition Coeff - FPC): {model.fpc:.4f}")
-            
-            # C. Predictive Power (Cohen's d)
-            cohen_d = model.calculate_cohens_d(df_temp, 'FLFI', 'Risk_Status')
-            print(f"[3] Predictive Power (Cohen's d): {cohen_d:.4f}")
-            
-            # D. Monthly R-squared
-            r2 = model.calculate_monthly_r2(df_temp, 'FLFI', 'jumlah_hotspot', 'tanggal_pengamatan')
-            print(f"[4] Monthly Aggregated R-squared (R²): {r2:.4f}")
-            print("="*65)
-            
-        else:
-            print(f"❌ Error: Column 'FLFI' not found in {file_path}")
-    else:
-        print(f"❌ Error: File {file_path} not found!")
+# ============================================================
+# 5. VISUALISASI GRAFIK ROC
+# ============================================================
+plt.figure(figsize=(10, 5), dpi=150)
+plt.plot(fpr, tpr, color='#c0392b', lw=3, label=f'VLIF-Model (AUC = {roc_auc:.4f})')
+plt.plot([0, 1], [0, 1], color='#2c3e50', lw=1.5, linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Validation: ROC Curve')
+plt.legend(loc="lower right")
+plt.grid(True, alpha=0.3)
+plt.show()
+
+# ============================================================
+# 6. TABEL OUTPUT LENGKAP
+# ============================================================
+print("\n" + "="*85)
+print(f"{'STATISTIK DISTRIBUSI & VALIDASI KLASTER VLIF-MODEL':^85}")
+print("="*85)
+print(f"{'Risk Class':<12} | {'% Area':<10} | {'Hotspots':<10} | {'% Hotspot':<10} | {'Total FRP':<12} | {'% FRP':<8}")
+print("-" * 85)
+for s in stats:
+    print(f"{s[0]:<12} | {s[1]:>9.2f}% | {s[2]:>10.0f} | {s[3]:>9.2f}% | {s[4]:>12.2f} | {s[5]:>7.2f}%")
+print("-" * 85)
+
+print(f"\nVALIDATION SUMMARY:")
+print(f"1. FPC (Structural Stability) : {fpc:.4f}")
+print(f"2. ROC-AUC (Predictive Power) : {roc_auc:.4f}")
+print(f"3. Brier Score (Accuracy)     : {brier:.4f}")
+print(f"4. Total Hotspots Processed   : {total_hotspots:,.0f}")
+print("="*85)
+
+# ============================================================
+# 7. EXPORT DATASET
+# ============================================================
+df.to_csv('/content/VLIF_CLUSTER_RESULT_TEST.csv', index=False)
+print(f"\n✅ Dataset berhasil disimpan ke /content/VLIF_CLUSTER_RESULT_TEST.csv")
