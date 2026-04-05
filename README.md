@@ -41,7 +41,7 @@ You can replicate the dataset construction from scratch using the provided pipel
 
 * **Pipeline Script**: `vlif_dataset_integration.py`
 * **Large File Download**: Due to GitHub size limits, the **Human_Activity_Index.zip** (containing OSM infrastructure data) must be downloaded from the following link:
-  > [🔗 Download Human_Activity_Index.zip https://bit.ly/HumanActivityzip *
+  > [🔗 Download Human_Activity_Index.zip https://bit.ly/HumanActivityZipFile
 
 > [!IMPORTANT]
 > **Technical Note:** The provided `VLIF_50000_SAMPLES.csv` is a statistically preserved sample derived from the original population of **2.6 million rows**. 
