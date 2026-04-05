@@ -46,7 +46,7 @@ You can replicate the dataset construction from scratch using the provided pipel
 > [!IMPORTANT]
 > **Technical Note on Dataset Population:**
 > The provided `VLIF_50000_SAMPLES.csv` is a statistically preserved sample derived from the original research population of **2,614,056 observations**. 
-> This full population represents a complete 2-year spatio-temporal grid (January 2023 – December 2024) covering the entire Sumatra region, with a spatial resolution of **0.1° (~11.1 km per grid)**. Normalization in the official sample is based on this global population.
+> This represents a complete 2-year spatio-temporal grid (2023–2024) covering Sumatra at **0.1° resolution**. Normalization in the official sample is based on this global population.
 
 ## 📁 Repository Structure
 * `vlif_dataset_integration.py`: Script to fuse multi-source raw data.
@@ -55,7 +55,7 @@ You can replicate the dataset construction from scratch using the provided pipel
 * `VLIF_50000_SAMPLES.csv`: Official representative dataset (Sampled from 2.6M records).
 * `provinsisumatera.geojson`: Sumatra provincial boundaries.
 
-## 🗺️ Visualization Result (Quarter 1-4)
+  ## 🗺️ Visualization Result (Quarter 1-4)
 ![Sumatra VLIF-Model Fire Risk Map](risk_map_vlif_model.png)
 *Figure: Spatio-temporal distribution of forest fire risk in Sumatra (Quarter 1-4) using the VLIF-Model.*
 
@@ -75,7 +75,7 @@ You can replicate the dataset construction from scratch using the provided pipel
 5. **Proceed to Model:** Run `main.py` followed by `visualization.py` for results.
 
 ```bash
-# Example command sequence for Colab
-!pip install pandas geopandas rasterio scikit-fuzzy scipy
-!python main.py
-!python visualization.py
+# Example command sequence
+pip install pandas geopandas rasterio scikit-fuzzy scipy
+python main.py
+python visualization.py
