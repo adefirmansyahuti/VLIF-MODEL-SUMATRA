@@ -1,186 +1,122 @@
-# -*- coding: utf-8 -*-
-"""
-Visualization Script: VLIF Model Sumatra
-Periode: Triwulan 3 2025
-"""
-
-import os
-import gc
 import pandas as pd
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import matplotlib.patheffects as path_effects
-import matplotlib.patches as mpatches
-from matplotlib.colors import ListedColormap
-import skfuzzy as fuzz
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as PathEffects
+import geopandas as gpd
+from scipy.interpolate import griddata
+from matplotlib.colors import ListedColormap, BoundaryNorm
+import gc
 
 # ============================================================
-# 1. KONFIGURASI PATH & LOADING DATA
+# 1. DEFINISI FUNGSI INTERPOLASI & MODUS
 # ============================================================
-path_csv = '/content/DATASET_GITHUB_SUMATRA_Q3_2025.csv'
-path_geojson = '/content/gabungan_10_wilayah_batas_provinsi.geojson'
-output_peta = '/content/PETA_Q3_2025_FINAL.png'
+def get_grid_bivariat(df_q, polygon_mask):
+    minx, miny, maxx, maxy = polygon_mask.bounds
+    # Grid 500x500 untuk kehalusan visual
+    grid_x, grid_y = np.mgrid[minx:maxx:500j, miny:maxy:500j]
 
-# Validasi Keberadaan File
-if not os.path.exists(path_csv) or not os.path.exists(path_geojson):
-    raise FileNotFoundError("❌ Pastikan file CSV dan GeoJSON sudah ada di path yang benar!")
+    points = df_q[['longitude', 'latitude']].values
+    values = df_q['risk_cluster'].values
+
+    # Interpolasi Linear untuk transisi warna yang halus
+    grid_z = griddata(points, values, (grid_x, grid_y), method='linear')
+
+    # Masking agar hanya muncul di daratan Sumatra (sesuai GeoJSON)
+    from shapely.vectorized import contains
+    mask = contains(polygon_mask, grid_x, grid_y)
+    grid_z[~mask] = np.nan
+
+    return grid_x, grid_y, grid_z
+
+def get_mode(x):
+    m = x.mode()
+    return m.iloc[0] if not m.empty else np.nan
+
+# ============================================================
+# 2. SETUP WARNA (HIJAU - KUNING - MERAH)
+# ============================================================
+cmap_v9 = ListedColormap(['#8DB600', '#FFFF00', '#FF0000'])
+norm_v9 = BoundaryNorm([-0.5, 0.5, 1.5, 2.5], cmap_v9.N)
+
+# ============================================================
+# 3. LOAD DATA HASIL CLUSTERING & GEOJSON
+# ============================================================
+path_csv = "/content/VLIF_CLUSTER_RESULT_TEST.csv"  # SESUAI DATASET BARU
+path_geojson = "/content/provinsisumatera.geojson"
 
 df = pd.read_csv(path_csv)
+df['date'] = pd.to_datetime(df['date'])
+df['triwulan'] = df['date'].dt.quarter
 
-# Filter 8 Provinsi Utama (Pembersihan Data)
-list_hapus = ['KEPULAUAN RIAU', 'BANGKA BELITUNG', 'KEPULAUAN BANGKA BELITUNG', 'KEPRI', 'BABEL']
-df = df[~df['provinsi'].str.upper().isin(list_hapus)]
+gdf = gpd.read_file(path_geojson)
+gdf['name'] = gdf['name'].str.upper().str.strip()
 
-# ============================================================
-# 2. RE-RUN CLUSTERING (IN MEMORY)
-# ============================================================
-def run_ufcm_for_viz(data):
-    """Fungsi clustering Fuzzy C-Means dalam memori."""
-    X = data.reshape(1, -1)
-    cntr, u, _, _, _, _, _ = fuzz.cluster.cmeans(
-        X, c=3, m=2.0, error=1e-5, maxiter=1000, init=None
-    )
-    # Sorting Cluster agar 0=Aman(Low), 1=Waspada(Mod), 2=Awas(High)
-    idx = np.argsort(cntr.flatten())
-    labels = np.argmax(u[idx], axis=0)
-    cluster_map = {0: 'Aman', 1: 'Waspada', 2: 'Awas'}
-    return [cluster_map[l] for l in labels]
-
-if 'FLFI' in df.columns:
-    df['klaster_risiko_fcm'] = run_ufcm_for_viz(df['FLFI'].values)
-else:
-    raise KeyError("❌ Error: Kolom 'FLFI' tidak ditemukan di dataset!")
-
-# ============================================================
-# 3. KALKULASI FLF RISK SCORE (FLFRS) & STATUS
-# ============================================================
-stats = df.groupby(['provinsi', 'klaster_risiko_fcm']).size().unstack(fill_value=0)
-stats_pct = (stats.divide(stats.sum(axis=1), axis=0) * 100)
-
-total_hotspot = df['jumlah_hotspot'].sum()
-total_grid = len(df)
-
-# FUNGSI DIUBAH NAMA MENJADI CALCULATE_ER
-def calculate_er(status):
-    subset = df[df['klaster_risiko_fcm'] == status]
-    if len(subset) == 0 or total_hotspot == 0: return 0
-    hotspots_status = subset['jumlah_hotspot'].sum()
-    grids_status = len(subset)
-    er = (hotspots_status / total_hotspot) / (grids_status / total_grid)
-    return er
-
-# VARIABEL DIUBAH MENJADI FORMAL
-ER_AWAS = calculate_er('Awas')
-ER_WASPADA = calculate_er('Waspada')
-ER_AMAN = calculate_er('Aman')
-
-# Hitung Skor FLFRS
-stats_pct['FLFRS'] = (
-    (stats_pct.get('Awas', 0) * ER_AWAS) +
-    (stats_pct.get('Waspada', 0) * ER_WASPADA) +
-    (stats_pct.get('Aman', 0) * ER_AMAN)
-) / ER_AWAS
-
-stats_pct = stats_pct.reset_index()
-
-# Penentuan Status Final (Threshold: 25 & 50)
-def mapping_status_final(flfrs):
-    if flfrs > 50:   return 2   # AWAS (MERAH)
-    if flfrs >= 25:  return 1   # WASPADA (KUNING)
-    return 0                    # AMAN (HIJAU)
-
-stats_pct['status_id'] = stats_pct['FLFRS'].apply(mapping_status_final)
-stats_pct['join_key'] = stats_pct['provinsi'].str.upper().str.strip()
-
-# ============================================================
-# 4. PREPARASI DATA GEOSPATIAL
-# ============================================================
-gdf_final = gpd.read_file(path_geojson)
-gdf_final['join_key'] = gdf_final['name'].str.upper().str.strip()
-gdf_final = gdf_final[~gdf_final['join_key'].isin(list_hapus)]
-
-# Merge Data Statistik ke GeoDataFrame
-merged = gdf_final.merge(stats_pct, on='join_key', how='left').fillna(0)
-
-# ============================================================
-# 5. VISUALISASI PETA (LAYOUT CENTERED)
-# ============================================================
-fig, ax = plt.subplots(1, 1, figsize=(25, 25), facecolor='white')
-
-# Definisi Colormap (Hijau -> Kuning -> Merah)
-cmap_manjur = ListedColormap(['#2ecc71', '#f1c40f', '#e74c3c'])
-
-# Mapping Nama Provinsi untuk Label (Singkat)
-short_name = {
-    'SUMATERA UTARA': 'SUMUT', 'SUMATERA SELATAN': 'SUMSEL',
-    'SUMATERA BARAT': 'SUMBAR', 'RIAU': 'RIAU', 'JAMBI': 'JAMBI',
-    'ACEH': 'ACEH', 'BENGKULU': 'BENGKULU', 'LAMPUNG': 'LAMPUNG'
+prov_map = {
+    'ACEH': 1, 'SUMATERA UTARA': 2, 'SUMATERA BARAT': 3, 'RIAU': 4,
+    'JAMBI': 5, 'SUMATERA SELATAN': 6, 'BENGKULU': 7, 'LAMPUNG': 8
 }
 
-# Plot Peta Dasar
-merged.plot(column='status_id', ax=ax, cmap=cmap_manjur, vmin=0, vmax=2,
-            edgecolor='#2c3e50', linewidth=2, zorder=3)
+gdf_sumatra = gdf[gdf['name'].isin(prov_map.keys())].copy()
+gdf_sumatra['prov_id'] = gdf_sumatra['name'].map(prov_map)
+sumatra_union = gdf_sumatra.union_all()
 
-# Penambahan Label pada Centroid Provinsi
-for idx, row in merged.iterrows():
-    if row['geometry'] is not None:
-        centroid = row['geometry'].centroid
-        lbl = short_name.get(row['join_key'], row['join_key'])
-        
-        # Penyesuaian posisi teks manual agar tidak tumpang tindih
-        offsets = {
-            'SUMATERA BARAT': (0.1, -0.2),
-            'RIAU': (0.1, 0.2),
-            'JAMBI': (-0.1, 0.1),
-            'SUMATERA SELATAN': (0.0, 0.1),
-            'LAMPUNG': (0.0, 0.2),
-            'ACEH': (0.0, -0.3)
-        }
-        off_x, off_y = offsets.get(row['join_key'], (0.0, 0.0))
-        
-        val_text = f"{lbl}\n{row['FLFRS']:.1f}"
-
-        ax.text(centroid.x + off_x, centroid.y + off_y, val_text,
-                fontsize=20, fontweight='black', ha='center', va='center',
-                color='black', zorder=10,
-                path_effects=[path_effects.withStroke(linewidth=10, foreground='white')])
-
-# Pengaturan Batas Pandang (Zoom to Sumatera)
-bounds = gdf_final.total_bounds
-ax.set_xlim(bounds[0]-0.5, bounds[2]+0.5)
-ax.set_ylim(bounds[1]-0.5, bounds[3]+0.5)
-
-# --- PRESISI TATA LETAK JUDUL (DIGABUNG) ---
-ax.axis('off')
-
-# Judul Utama dan Sub-judul (Triwulan) digabung jadi 1 kesatuan
-combined_title = ('MONITORING THE RISK STATUS OF SUMATERA FOREST AND LAND FIRE \n'
-                  '(8 MAIN LAND PROVINCES) - BASE ON FLFRS, SCALE 0–100\n'
-                  'TRIWULAN 3 - 2025')
-
-plt.suptitle(combined_title,
-             fontsize=35, fontweight='black', y=0.98, ha='center')
+# Agregasi Spasial per Grid (Round 2 digit) untuk efisiensi visualisasi
+temp_agg = df.assign(
+    lat_round=df['latitude'].round(2),
+    lon_round=df['longitude'].round(2)
+).groupby(['lon_round', 'lat_round', 'triwulan'])['risk_cluster'].agg(get_mode).reset_index()
+temp_agg.columns = ['longitude', 'latitude', 'triwulan', 'risk_cluster']
 
 # ============================================================
-# 6. LEGENDA & TATA LETAK (CENTERED)
+# 4. PLOTTING (QUARTER 1-4)
 # ============================================================
-# Membuat Patch Legenda
-leg_patches = [
-    mpatches.Patch(color='#e74c3c', label='HIGH RISK (FLFRS > 50)'),
-    mpatches.Patch(color='#f1c40f', label='MODERATE RISK (FLFRS 25–50)'),
-    mpatches.Patch(color='#2ecc71', label='LOW RISK (FLFRS < 25)')
-]
+fig, axes = plt.subplots(1, 4, figsize=(52, 21), facecolor='white')
+plt.subplots_adjust(left=0.05, right=0.95, top=0.88, bottom=0.18, wspace=0.01)
 
-# Legenda di luar area plot utama
-ax.legend(handles=leg_patches, loc='center left', bbox_to_anchor=(1.05, 0.5),
-          fontsize=20, frameon=True, shadow=True, facecolor='white',
-          title=f"FLFRS THRESHOLD\n(EFFICIENCY RATIO)", title_fontsize=22)
+for i, q in enumerate([1, 2, 3, 4]):
+    ax = axes[i]
+    df_q = temp_agg[temp_agg['triwulan'] == q].copy()
 
-# --- FINAL ADJUSTMENT FOR PADDING ---
-plt.subplots_adjust(right=0.75, top=0.90, bottom=0.05) # Mengatur ruang agar tidak dempet
-plt.savefig(output_peta, dpi=300, bbox_inches='tight')
+    if not df_q.empty:
+        # Layer 1: Background Daratan
+        gdf_sumatra.plot(ax=ax, facecolor='#F7FDF7', edgecolor='none', zorder=0)
+
+        # Layer 2: Interpolasi Risiko (VLIF-Model)
+        gx, gy, z_final = get_grid_bivariat(df_q, sumatra_union)
+        im = ax.pcolormesh(gx, gy, z_final, cmap=cmap_v9, norm=norm_v9,
+                           shading='nearest', zorder=1, alpha=0.9)
+
+        # Layer 3: Border Provinsi
+        gdf_sumatra.plot(ax=ax, facecolor='none', edgecolor='#000000', linewidth=3.5, zorder=10)
+
+        # Layer 4: Indeks Angka Provinsi
+        for _, row in gdf_sumatra.iterrows():
+            coords = row.geometry.representative_point().coords[0]
+            txt = ax.text(coords[0], coords[1], str(int(row['prov_id'])),
+                          fontsize=45, fontweight='black', color='black',
+                          ha='center', va='center', zorder=100)
+            txt.set_path_effects([PathEffects.withStroke(linewidth=5, foreground='white')])
+
+    ax.set_xlim(94.8, 106.3)
+    ax.set_ylim(-6.0, 5.9)
+    ax.set_title(f'QUARTER {q}', fontsize=65, fontweight='black', pad=25)
+    ax.axis('off')
+
+# Footer: Legenda Nama Provinsi
+h_legend = "  |  ".join([f"{v}. {k}" for k, v in prov_map.items()])
+fig.text(0.5, 0.12, h_legend, ha='center', fontsize=40, fontweight='bold', family='monospace')
+
+# Footer: Legenda Tingkat Risiko
+cbar_ax = fig.add_axes([0.35, 0.08, 0.3, 0.012])
+cbar = fig.colorbar(im, cax=cbar_ax, orientation='horizontal', ticks=[0, 1, 2])
+cbar.ax.set_xticklabels(['LOW RISK', 'MODERATE RISK', 'HIGH RISK'], fontsize=32, fontweight='bold')
+
+# Header Utama
+fig.text(0.5, 0.94, 'SUMATRA ISLAND VLIF-MODEL FIRE RISK (SPATIAL QUARTERLY MODAL)',
+         ha='center', fontsize=65, fontweight='black')
+
 plt.show()
 
-# Membersihkan memori
+# Cleanup RAM
+del temp_agg
 gc.collect()
